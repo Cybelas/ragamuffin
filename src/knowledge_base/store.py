@@ -144,6 +144,7 @@ class KnowledgeStore:
         *,
         embedding_model: str,
         top_k: int = 5,
+	min_score: float | None = None,
     ) -> list[SearchResult]:
         if top_k < 1:
             raise ValueError("top_k must be at least 1")
@@ -170,6 +171,12 @@ class KnowledgeStore:
             for row in rows
         ]
         results.sort(key=lambda result: result.score, reverse=True)
+
+        if min_score is not None:
+            results = [
+                result for result in results if result.score >= min_score
+            ]
+
         return results[:top_k]
 
     def stats(self) -> tuple[int, int]:

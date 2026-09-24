@@ -39,6 +39,27 @@ class KnowledgeStoreTests(unittest.TestCase):
         self.assertEqual(results[0].text, "about databases")
         self.assertGreater(results[0].score, results[1].score)
 
+    def test_search_excludes_results_below_minimum_score(self) -> None:
+        self.store.replace_document(
+            source="notes.md",
+            content_hash="abc",
+            embedding_model="test-model",
+            chunks=["strong match", "weak match"],
+            embeddings=[[1.0, 0.0], [0.0, 1.0]],
+        )
+
+        results = self.store.search(
+            [1.0, 0.0],
+            embedding_model="test-model",
+            top_k=2,
+            min_score=0.5,
+        )
+
+        self.assertEqual(
+            [result.text for result in results],
+            ["strong match"],
+        )
+
     def test_replacing_document_removes_old_chunks(self) -> None:
         self.store.replace_document(
             source="notes.md",
