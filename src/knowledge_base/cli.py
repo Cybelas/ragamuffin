@@ -53,6 +53,16 @@ def print_results(results: Iterable[SearchResult]) -> None:
         )
 
 
+def no_results_message(min_score: float | None) -> str:
+    if min_score is None:
+        return "No indexed chunks found. Run `kb ingest PATH` first."
+
+    return (
+        f"No chunks met --min-score {min_score:.4f}. "
+        "Check the index or try a lower threshold."
+    )
+
+
 def embedding_model_from_environment() -> str:
     return os.environ.get("KB_EMBEDDING_MODEL", "text-embedding-3-small")
 
@@ -112,6 +122,8 @@ def retrieve(
     query: str,
     top_k: int,
     store: KnowledgeStore,
+    *,
+    min_score: float | None = None,
 ) -> tuple[OpenAIProvider, list[SearchResult]]:
     provider = OpenAIProvider()
     query_embedding = provider.embed([query])[0]
@@ -119,23 +131,35 @@ def retrieve(
         query_embedding,
         embedding_model=provider.embedding_model,
         top_k=top_k,
+        min_score=min_score,
     )
     return provider, results
 
 
 def run_search(args: argparse.Namespace, store: KnowledgeStore) -> int:
-    _, results = retrieve(args.query, args.top_k, store)
+    _, results = retrieve(
+        args.query,
+        args.top_k,
+        store,
+        min_score=args.min_score,
+    )
     if not results:
-        print("No indexed chunks found. Run `kb ingest PATH` first.")
+        print(no_results_message(args.min_score))
         return 1
+
     print_results(results)
     return 0
 
 
 def run_ask(args: argparse.Namespace, store: KnowledgeStore) -> int:
-    provider, results = retrieve(args.question, args.top_k, store)
+    provider, results = retrieve(
+        args.question,
+        args.top_k,
+        store,
+        min_score=args.min_score,
+    )
     if not results:
-        print("No indexed chunks found. Run `kb ingest PATH` first.")
+        print(no_results_message(args.min_score))
         return 1
 
     print(provider.answer(args.question, results))
@@ -168,11 +192,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     search.add_argument("query")
     search.add_argument("--top-k", type=int, default=5)
+    search.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Exclude chunks below this cosine similarity score",
+    )
     search.set_defaults(handler=run_search)
 
     ask = subparsers.add_parser("ask", help="Retrieve chunks and answer")
     ask.add_argument("question")
     ask.add_argument("--top-k", type=int, default=5)
+    ask.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Exclude chunks below this cosine similarity score",
+    )
     ask.set_defaults(handler=run_ask)
 
     stats = subparsers.add_parser("stats", help="Show index counts")
